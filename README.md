@@ -219,6 +219,27 @@ The gateway forwards verified identity information and an internal gateway secre
 
 Each service also exposes its own `/health` endpoint.
 
+## Rate Limiting
+
+Rate limits are created by the shared `createRateLimiter` wrapper around `express-rate-limit`. Limits use fixed 15-minute windows and are keyed by the client IP address seen by Express. The gateway limit applies before health checks and proxy routes; service-specific limits provide additional limits for selected routes reached through the gateway.
+
+| Scope | Route | Limit |
+|---|---|---:|
+| API Gateway | All requests, including `/health` and proxied routes | 100 requests per IP |
+| Auth Service | `POST /auth/register` | 5 requests per IP |
+| Auth Service | `POST /auth/login` | 10 requests per IP |
+| Auth Service | `GET /auth/me` | 20 requests per IP |
+| Task Service | `POST /tasks` | 20 requests per IP |
+| Task Service | `GET /tasks` | 100 requests per IP |
+| Task Service | `GET /tasks/:id` | 100 requests per IP |
+| Task Service | `DELETE /tasks/:id` | 10 requests per IP |
+| Media Service | `POST /media/:taskId/attachments` | 20 requests per IP |
+| Workflow Service | All requests, including `/health` | 100 requests per IP |
+
+Requests that exceed a limit receive HTTP `429` with a JSON body containing `success: false` and a route-specific or default message. Draft-8 standard rate-limit headers are enabled; legacy `X-RateLimit-*` headers are disabled. Successful and failed requests both count toward the limit. The auth registration and login body validators run before their rate limiters, so invalid bodies are rejected before they are counted. The attachment-listing route has no service-specific rate limit, though requests through the gateway still count toward its global limit.
+
+The default in-memory store is used: counts are local to each process, reset when it restarts, and are not shared across service replicas. The IP key is based on the address Express sees; without trusted-proxy configuration, that may be a proxy address rather than the original client address.
+
 ## Database and Messaging
 
 ### PostgreSQL
@@ -608,6 +629,27 @@ Protected routes use bearer JWT authentication.
 The gateway forwards verified identity information and an internal gateway secret to protected backend services.
 
 Each service also exposes its own `/health` endpoint.
+
+## Rate Limiting
+
+Rate limits are created by the shared `createRateLimiter` wrapper around `express-rate-limit`. Limits use fixed 15-minute windows and are keyed by the client IP address seen by Express. The gateway limit applies before health checks and proxy routes; service-specific limits provide additional limits for selected routes reached through the gateway.
+
+| Scope | Route | Limit |
+|---|---|---:|
+| API Gateway | All requests, including `/health` and proxied routes | 100 requests per IP |
+| Auth Service | `POST /auth/register` | 5 requests per IP |
+| Auth Service | `POST /auth/login` | 10 requests per IP |
+| Auth Service | `GET /auth/me` | 20 requests per IP |
+| Task Service | `POST /tasks` | 20 requests per IP |
+| Task Service | `GET /tasks` | 100 requests per IP |
+| Task Service | `GET /tasks/:id` | 100 requests per IP |
+| Task Service | `DELETE /tasks/:id` | 10 requests per IP |
+| Media Service | `POST /media/:taskId/attachments` | 20 requests per IP |
+| Workflow Service | All requests, including `/health` | 100 requests per IP |
+
+Requests that exceed a limit receive HTTP `429` with a JSON body containing `success: false` and a route-specific or default message. Draft-8 standard rate-limit headers are enabled; legacy `X-RateLimit-*` headers are disabled. Successful and failed requests both count toward the limit. The auth registration and login body validators run before their rate limiters, so invalid bodies are rejected before they are counted. The attachment-listing route has no service-specific rate limit, though requests through the gateway still count toward its global limit.
+
+The default in-memory store is used: counts are local to each process, reset when it restarts, and are not shared across service replicas. The IP key is based on the address Express sees; without trusted-proxy configuration, that may be a proxy address rather than the original client address.
 
 ## Database and Messaging
 
