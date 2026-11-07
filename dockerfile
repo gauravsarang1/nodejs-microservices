@@ -24,6 +24,6 @@ COPY . .
 
 ENV NODE_ENV=development
 
-EXPOSE 3000 3001 3002 3003
+EXPOSE 3000 3001 3002 3003 3004
 
 CMD ["npm", "run", "dev:gateway"]
