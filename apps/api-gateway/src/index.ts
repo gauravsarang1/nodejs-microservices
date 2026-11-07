@@ -3,13 +3,13 @@ import { resolve } from "node:path";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import rateLimit, { MINUTE } from "express-rate-limit";
 import {
   AppError,
   errorHandler,
   httpLogger,
   logger,
   successResponse,
+  createRateLimiter,
 } from "shared";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import { gatewayAuth } from "./middleware/gatewayAuth";
@@ -26,14 +26,13 @@ const app = express();
 //secure default http headers
 app.use(helmet());
 app.use(cors());
-app.use(
-  rateLimit({
-    windowMs: 15 * MINUTE, // SECOND, MINUTE, HOUR, and DAY constants are available, or a use bare number for milliseconds
-    limit: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes).
-    standardHeaders: true, // draft-6: `RateLimit-*` headers; draft-7 & draft-8: combined `RateLimit` header
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers.
-  }),
-);
+
+//rate limiter middleware to limit the number of requests per IP address
+const rateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 100, // limit each IP to 100 requests per windowMs
+});
+app.use(rateLimiter);
 
 app.use(httpLogger);
 

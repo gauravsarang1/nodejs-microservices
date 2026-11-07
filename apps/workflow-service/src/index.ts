@@ -8,6 +8,7 @@ import {
   logger,
   requireGatewaySecret,
   successResponse,
+  createRateLimiter
 } from "shared";
 import { startKafka } from "./services/workflow.service";
 
@@ -17,6 +18,15 @@ config({ path: resolve(process.cwd(), "../../.env") });
 const PORT = process.env.WORKFLOW_SERVICE_PORT || 3004;
 
 const app = express();
+
+//rate limiter middleware to limit the number of requests per IP address
+const rateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 100, // limit each IP to 100 requests per windowMs
+  message:
+    "Too many requests from this IP, please try again after 15 minutes.",
+});
+app.use(rateLimiter);
 
 app.use(httpLogger);
 app.use(express.json());

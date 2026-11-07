@@ -13,3 +13,4 @@ export { createKafkaClient } from "./kafka/client";
 export { ensureKafkaTopics } from "./kafka/admin";
 export { createProducer, publishJson, publishJsonSafe } from "./kafka/producer";
 export { createConsumer, runConsumer } from "./kafka/consumer";
+export { createRateLimiter } from "./middleware/rateLimiter";
