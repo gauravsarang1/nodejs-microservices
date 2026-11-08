@@ -1,5 +1,5 @@
 import { Kafka, logLevel, type KafkaConfig } from "kafkajs";
-import { boolean } from "zod";
+import { AppError } from "../errors/AppError";
 
 export function createKafkaClient(
   clientId: string,
@@ -8,10 +8,13 @@ export function createKafkaClient(
   const brokers = (process.env.KAFKA_BROKERS || "localhost:9092")
     .split(",")
     .map((broker) => broker.trim())
-    .filter(boolean);
+    .filter((broker) => broker.length > 0);
 
   if (brokers.length === 0) {
-    throw new Error("KAFKA_BROKERS are empty");
+    throw new AppError(500, "Kafka broker configuration is empty", false, {
+      code: "CONFIGURATION_INVALID",
+      details: { key: "KAFKA_BROKERS" },
+    });
   }
 
   return new Kafka({

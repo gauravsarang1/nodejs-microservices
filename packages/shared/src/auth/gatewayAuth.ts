@@ -12,13 +12,22 @@ export function requireGatewaySecret(
   const expected = process.env.GATEWAY_SECRET;
 
   if (!expected) {
-    return next(new AppError(500, "GATEWAY_SECRET is not configured"));
+    return next(
+      new AppError(500, "Gateway authentication is not configured", false, {
+        code: "CONFIGURATION_MISSING",
+        details: { key: "GATEWAY_SECRET" },
+      }),
+    );
   }
 
   const incoming = req.header("x-gateway-secret");
 
   if (!incoming || incoming !== expected) {
-    return next(new AppError(403, "forbidden"));
+    return next(
+      new AppError(401, "Invalid gateway credentials", true, {
+        code: "GATEWAY_AUTHENTICATION_FAILED",
+      }),
+    );
   }
 
   next();

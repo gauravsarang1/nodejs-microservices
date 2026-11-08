@@ -7,11 +7,17 @@ export function validateBody(schema: ZodSchema) {
     const result = schema.safeParse(req.body);
 
     if (!result.success) {
-      const message = result.error.issues
-        .map((issue) => issue.message)
-        .join(", ");
-
-      return next(new AppError(400, message));
+      return next(
+        new AppError(400, "Request validation failed", true, {
+          code: "VALIDATION_FAILED",
+          publicDetails: {
+            issues: result.error.issues.map((issue) => ({
+              field: issue.path.join("."),
+              message: issue.message,
+            })),
+          },
+        }),
+      );
     }
 
     req.body = result.data;

@@ -3,18 +3,20 @@ import express from "express";
 import { resolve } from "node:path";
 import {
   AppError,
+  configureServiceLogging,
   errorHandler,
-  httpLogger,
   logger,
-  requireGatewaySecret,
   successResponse,
-  createRateLimiter
+  createRateLimiter,
+  validateRequiredEnvironment,
+  verifyDatabaseConnection,
 } from "shared";
 import { startKafka } from "./services/workflow.service";
 
 config({ path: resolve(process.cwd(), ".env") });
 config({ path: resolve(process.cwd(), "../../.env") });
 
+const httpLogger = configureServiceLogging("workflow-service");
 const PORT = process.env.WORKFLOW_SERVICE_PORT || 3004;
 
 const app = express();
@@ -26,9 +28,8 @@ const rateLimiter = createRateLimiter({
   message:
     "Too many requests from this IP, please try again after 15 minutes.",
 });
-app.use(rateLimiter);
-
 app.use(httpLogger);
+app.use(rateLimiter);
 app.use(express.json());
 
 app.get("/health", (_req, res) => {
@@ -41,16 +42,27 @@ app.use((_req, _res, next) => {
 
 app.use(errorHandler);
 
-startKafka()
-  .then(() => {
-    logger.info("Kafka initialized successfully");
-    app.listen(PORT, () => {
-      logger.info(`Workflow service is running on port ${PORT}`);
-    });
-  })
-  .catch((err) => {
-    logger.error("Failed to initialize Kafka", err);
-    process.exit(1);
+async function startWorkflowService() {
+  validateRequiredEnvironment(["DATABASE_URL", "KAFKA_BROKERS"]);
+  await verifyDatabaseConnection();
+  await startKafka();
+  logger.info({ dependency: "kafka" }, "Dependency initialized");
+
+  app.listen(PORT, () => {
+    logger.info({ port: PORT }, "Workflow service started");
   });
+}
 
-
+startWorkflowService().catch((err: unknown) => {
+  logger.fatal(
+    {
+      err,
+      operation: "service_startup",
+      ...(err instanceof AppError
+        ? { errorCode: err.code, ...err.details }
+        : {}),
+    },
+    "Workflow service failed to start",
+  );
+  process.exit(1);
+});

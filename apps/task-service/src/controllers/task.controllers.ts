@@ -1,4 +1,4 @@
-import type { Request, Response, NextFunction } from "express";
+import type { Request, Response } from "express";
 import * as taskService from "../services/task.services";
 import { AppError, successResponse } from "shared";
 
@@ -7,7 +7,9 @@ function requireIdentity(req: Request) {
   const role = req.header("x-user-role");
 
   if (!role || !userId) {
-    throw new AppError(401, "Missing user identity");
+    throw new AppError(401, "Missing user identity", true, {
+      code: "MISSING_USER_IDENTITY",
+    });
   }
 
   return { userId, role };
@@ -16,63 +18,37 @@ function requireIdentity(req: Request) {
 export async function createTask(
   req: Request,
   res: Response,
-  next: NextFunction,
 ) {
-  try {
-    const { userId } = requireIdentity(req);
-    const task = await taskService.createTask(req.body, userId);
-    successResponse(res, { task }, 201);
-  } catch (err) {
-    next(err);
-  }
+  const { userId } = requireIdentity(req);
+  const task = await taskService.createTask(
+    req.body,
+    userId,
+    String(req.id),
+  );
+  successResponse(res, { task }, 201);
 }
 
-export async function listTasks(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
-  try {
-    const { userId, role } = requireIdentity(req);
-    const tasks = await taskService.listTasks(userId, role);
+export async function listTasks(req: Request, res: Response) {
+  const { userId, role } = requireIdentity(req);
+  const tasks = await taskService.listTasks(userId, role);
 
-    successResponse(res, { tasks });
-  } catch (error) {
-    next(error);
-  }
+  successResponse(res, { tasks });
 }
 
-export async function getSingleTask(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
-  try {
-    const { userId, role } = requireIdentity(req);
-    const id = String(req.params.id);
+export async function getSingleTask(req: Request, res: Response) {
+  const { userId, role } = requireIdentity(req);
+  const id = String(req.params.id);
 
-    const task = await taskService.getSingleTask(id, userId, role);
+  const task = await taskService.getSingleTask(id, userId, role);
 
-    successResponse(res, { task });
-  } catch (error) {
-    next(error);
-  }
+  successResponse(res, { task });
 }
 
-export async function deleteSingleTask(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
+export async function deleteSingleTask(req: Request, res: Response) {
   const { role } = requireIdentity(req);
   const id = String(req.params.id);
   const deletedResult = await taskService.deleteSingleTask(id, role);
   successResponse(res, deletedResult);
-
-  try {
-  } catch (error) {
-    next(error);
-  }
 }
 
 // update task will be homework -> vv simple

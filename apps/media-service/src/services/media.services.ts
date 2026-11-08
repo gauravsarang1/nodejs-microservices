@@ -8,11 +8,17 @@ async function assertTaskAccess(taskId: string, userId: string, role: string) {
   const task = await attachmentRepo.findTaskAccess(taskId);
 
   if (!task) {
-    throw new AppError(404, "Task not found");
+    throw new AppError(404, "Task not found", true, {
+      code: "TASK_NOT_FOUND",
+      details: { taskId },
+    });
   }
 
   if (role !== "ADMIN" && task.created_by !== userId) {
-    throw new AppError(403, "Forbidden access to task attachments");
+    throw new AppError(403, "You cannot access attachments for this task", true, {
+      code: "TASK_ATTACHMENT_ACCESS_DENIED",
+      details: { taskId },
+    });
   }
 }
 
@@ -20,10 +26,13 @@ export async function uploadAttachment(input: {
   taskId: string;
   userId: string;
   role: string;
+  requestId: string;
   file?: Express.Multer.File;
 }) {
   if (!input.file) {
-    throw new AppError(400, "Image file is required");
+    throw new AppError(400, "An image file is required", true, {
+      code: "IMAGE_FILE_REQUIRED",
+    });
   }
 
   await assertTaskAccess(input.taskId, input.userId, input.role);
@@ -40,9 +49,30 @@ export async function uploadAttachment(input: {
     uploadedBy: input.userId,
   });
 
-  // we just have to publish an event here
-  // now we have uploaded an attachment
-  await publishAttachmentEvent(attachment.id, input.userId);
+  try {
+    await publishAttachmentEvent(
+      input.taskId,
+      attachment.id,
+      input.userId,
+      input.requestId,
+    );
+  } catch (cause) {
+    throw new AppError(
+      503,
+      "Attachment was stored, but its event could not be published",
+      true,
+      {
+        code: "ATTACHMENT_EVENT_PUBLISH_FAILED",
+        cause,
+        details: {
+          attachmentId: attachment.id,
+          taskId: input.taskId,
+          operation: "publish_attachment_uploaded_event",
+          databaseWriteCompleted: true,
+        },
+      },
+    );
+  }
   return convertToPublicMediaAttachment(attachment);
 }
 

@@ -2,37 +2,56 @@ import dns from "node:dns";
 import net from "node:net";
 import { Pool, type PoolConfig } from "pg";
 import { logger } from "../logger/logger";
+import { AppError } from "../errors/AppError";
+import { runDatabaseQuery } from "./databaseError";
 
 let pool: Pool | null = null;
 
 function getPositiveInt(name: string, fallback: number): number {
   const rawValue = process.env[name];
 
-  if (!rawValue) {
+  if (rawValue === undefined) {
     return fallback;
   }
 
   const parsed = Number(rawValue);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  if (!/^\d+$/.test(rawValue) || !Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new AppError(500, `${name} must be a positive integer`, false, {
+      code: "CONFIGURATION_INVALID",
+      details: { key: name },
+    });
+  }
+
+  return parsed;
 }
 
 function normalizeDatabaseConfig(): PoolConfig {
   const connectionString = process.env.DATABASE_URL;
 
   if (!connectionString) {
-    throw new Error("DATABASE_URL is not set");
+    throw new AppError(500, "DATABASE_URL is not set", false, {
+      code: "CONFIGURATION_MISSING",
+      details: { key: "DATABASE_URL" },
+    });
   }
 
   let parsedUrl: URL;
 
   try {
     parsedUrl = new URL(connectionString);
-  } catch {
-    throw new Error("DATABASE_URL is invalid");
+  } catch (cause) {
+    throw new AppError(500, "DATABASE_URL is invalid", false, {
+      code: "CONFIGURATION_INVALID",
+      cause,
+      details: { key: "DATABASE_URL" },
+    });
   }
 
   if (!parsedUrl.hostname) {
-    throw new Error("DATABASE_URL hostname is not set");
+    throw new AppError(500, "DATABASE_URL hostname is not set", false, {
+      code: "CONFIGURATION_INVALID",
+      details: { key: "DATABASE_URL" },
+    });
   }
 
   const isLocalDatabase =
@@ -69,6 +88,12 @@ export function getPool(): Pool {
   }
 
   return pool;
+}
+
+export async function verifyDatabaseConnection(): Promise<void> {
+  await runDatabaseQuery("connect", "database", () =>
+    getPool().query("SELECT 1"),
+  );
 }
 
 export async function closePool(): Promise<void> {

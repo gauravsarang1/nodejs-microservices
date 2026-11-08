@@ -1,6 +1,7 @@
 import rateLimit, {
   type Options,
 } from "express-rate-limit";
+import { errorResponse } from "../response/response";
 
 interface RateLimiterConfig {
   windowMs: number;
@@ -31,11 +32,27 @@ export const createRateLimiter = ({
 
     ...(keyGenerator && { keyGenerator }),
 
-    handler: (_req, res) => {
-      res.status(429).json({
-        success: false,
-        message,
-      });
+    handler: (req, res) => {
+      req.log.warn(
+        {
+          requestId: String(req.id),
+          method: req.method,
+          path: req.path,
+          statusCode: 429,
+          errorCode: "RATE_LIMIT_EXCEEDED",
+        },
+        "HTTP request rate limited",
+      );
+
+      errorResponse(
+        res,
+        {
+          code: "RATE_LIMIT_EXCEEDED",
+          message,
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+        429,
+      );
     },
   });
 };

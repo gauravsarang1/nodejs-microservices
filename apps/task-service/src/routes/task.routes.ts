@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { validateBody } from "shared";
-import { createTaskSchema } from "../schemas/task.schemas";
+import { validateBody, validateParams } from "shared";
+import { createTaskSchema, taskIdParamsSchema } from "../schemas/task.schemas";
 import * as taskController from "../controllers/task.controllers";
 
 import {
@@ -27,12 +27,14 @@ router.get(
 
 router.get(
   "/:id",
+  validateParams(taskIdParamsSchema),
   getSingleTaskRateLimiter,
   taskController.getSingleTask,
 );
 
 router.delete(
   "/:id",
+  validateParams(taskIdParamsSchema),
   deleteTaskRateLimiter,
   taskController.deleteSingleTask,
 );

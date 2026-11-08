@@ -24,7 +24,10 @@ function attachGatewaySecret(req: Request) {
   const secret = process.env.GATEWAY_SECRET;
 
   if (!secret) {
-    throw new AppError(500, "GATEWAY_SECRET is not set/configured/missing");
+    throw new AppError(500, "Gateway authentication is not configured", false, {
+      code: "CONFIGURATION_MISSING",
+      details: { key: "GATEWAY_SECRET" },
+    });
   }
 
   req.headers["x-gateway-secret"] = secret;
@@ -49,54 +52,40 @@ function attachUserHeaders(req: Request, userId: string, role: string) {
 // run on every /auth request before the proxy forward to auth service
 
 export function gatewayAuth(req: Request, _res: Response, next: NextFunction) {
-  try {
-    // strip/remove the identity headers
-    stripIdentityHeaders(req);
-    attachGatewaySecret(req);
+  stripIdentityHeaders(req);
+  attachGatewaySecret(req);
 
-    const path = requestPath(req);
+  const path = requestPath(req);
 
-    // if this path is a public route we r going to bypass
-    // we do not need auth
-
-    if (isPublicRoute(req.method, path)) {
-      return next();
-    }
-
-    const authHeader = req.header("authorization");
-
-    if (!authHeader?.startsWith("Bearer ")) {
-      throw new AppError(401, "Missing or invalid auth token");
-    }
-
-    const token = authHeader.slice("Bearer ".length).trim();
-    const payload = verifyToken(token);
-
-    // RBAC -> is this role allowed on this method + on this path
-
-    const allowedRoles = getAllowedRoles(req.method, path);
-
-    if (!allowedRoles) {
-      throw new AppError(404, "Route not found");
-    }
-
-    // forbidden
-    // /task/delete -> admin , user can not access
-    if (!allowedRoles.includes(payload.role)) {
-      throw new AppError(
-        403,
-        "Forbidden, you do not have access to this route",
-      );
-    }
-
-    attachUserHeaders(req, payload.userId, payload.role);
-    next();
-  } catch (err) {
-    if (err instanceof AppError) {
-      return next(err);
-    }
-
-    // in some reason jwt.verify fails - generic 401
-    return next(new AppError(401, "Invalid or expired token"));
+  if (isPublicRoute(req.method, path)) {
+    return next();
   }
+
+  const authHeader = req.header("authorization");
+
+  if (!authHeader?.startsWith("Bearer ")) {
+    throw new AppError(401, "Missing or invalid authentication token", true, {
+      code: "INVALID_AUTH_TOKEN",
+    });
+  }
+
+  const token = authHeader.slice("Bearer ".length).trim();
+  const payload = verifyToken(token);
+  const allowedRoles = getAllowedRoles(req.method, path);
+
+  if (!allowedRoles) {
+    throw new AppError(404, "Route not found");
+  }
+
+  if (!allowedRoles.includes(payload.role)) {
+    throw new AppError(
+      403,
+      "You do not have access to this route",
+      true,
+      { code: "AUTHORIZATION_FAILED" },
+    );
+  }
+
+  attachUserHeaders(req, payload.userId, payload.role);
+  next();
 }

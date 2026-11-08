@@ -3,17 +3,20 @@ import express from "express";
 import { resolve } from "node:path";
 import {
   AppError,
+  configureServiceLogging,
   errorHandler,
-  httpLogger,
   logger,
   requireGatewaySecret,
   successResponse,
+  validateRequiredEnvironment,
+  verifyDatabaseConnection,
 } from "shared";
 import authRoutes from "./routes/auth.routes";
 
 config({ path: resolve(process.cwd(), ".env") });
 config({ path: resolve(process.cwd(), "../../.env") });
 
+const httpLogger = configureServiceLogging("auth-service");
 const PORT = process.env.AUTH_SERVICE_PORT || 3001;
 
 const app = express();
@@ -33,6 +36,25 @@ app.use((_req, _res, next) => {
 
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  logger.info(`Auth service is now running on port ${PORT}`);
+async function startAuthService() {
+  validateRequiredEnvironment(["DATABASE_URL", "JWT_SECRET", "GATEWAY_SECRET"]);
+  await verifyDatabaseConnection();
+
+  app.listen(PORT, () => {
+    logger.info({ port: PORT }, "Auth service started");
+  });
+}
+
+startAuthService().catch((err: unknown) => {
+  logger.fatal(
+    {
+      err,
+      operation: "service_startup",
+      ...(err instanceof AppError
+        ? { errorCode: err.code, ...err.details }
+        : {}),
+    },
+    "Auth service failed to start",
+  );
+  process.exit(1);
 });

@@ -1,18 +1,19 @@
-import { getPool } from "shared";
-import { Task } from "../utils/types";
+import { getPool, runDatabaseQuery } from "shared";
+import type { Task } from "../utils/types";
 
 export async function createTask(input: {
   title: string;
   createdBy: string;
 }): Promise<Task> {
-  const result = await getPool().query<Task>(
-    `
+  const result = await runDatabaseQuery("create", "task", () =>
+    getPool().query<Task>(
+      `
         INSERT INTO tasks (title, created_by)
         VALUES ($1, $2)
         RETURNING id, title, status, created_by, created_at, updated_at
-        
         `,
-    [input.title, input.createdBy],
+      [input.title, input.createdBy],
+    ),
   );
 
   return result.rows[0];
@@ -29,25 +30,29 @@ export async function listTasks(input: {
   role: string;
 }): Promise<Task[]> {
   if (input.role === "ADMIN") {
-    const result = await getPool().query<Task>(
-      `
+    const result = await runDatabaseQuery("list", "task", () =>
+      getPool().query<Task>(
+        `
         SELECT id, title, status, created_by,  created_at, updated_at
         FROM tasks
         ORDER BY created_at DESC
         `,
+      ),
     );
 
     return result.rows;
   }
 
-  const result = await getPool().query<Task>(
-    `
+  const result = await runDatabaseQuery("list_by_owner", "task", () =>
+    getPool().query<Task>(
+      `
         SELECT id, title, status, created_by,  created_at, updated_at
         FROM tasks
         WHERE created_by = $1
         ORDER BY created_at DESC
         `,
-    [input.userId],
+      [input.userId],
+    ),
   );
 
   return result.rows;
@@ -57,21 +62,24 @@ export async function listTasks(input: {
 //:id
 
 export async function findSingleTaskById(id: string): Promise<Task | null> {
-  const result = await getPool().query<Task>(
-    `
+  const result = await runDatabaseQuery("find_by_id", "task", () =>
+    getPool().query<Task>(
+      `
         SELECT id, title, status, created_by, created_at, updated_at
         FROM tasks
         WHERE id = $1
-        
         `,
-    [id],
+      [id],
+    ),
   );
 
   return result.rows[0] ?? null;
 }
 
 export async function deleteSingleTaskById(id: string): Promise<boolean> {
-  const result = await getPool().query(`DELETE FROM tasks WHERE id = $1`, [id]);
+  const result = await runDatabaseQuery("delete", "task", () =>
+    getPool().query(`DELETE FROM tasks WHERE id = $1`, [id]),
+  );
 
   return (result.rowCount ?? 0) > 0;
 }

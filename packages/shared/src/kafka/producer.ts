@@ -1,6 +1,7 @@
 import type { Producer, RecordMetadata } from "kafkajs";
 import { createKafkaClient } from "./client";
 import { logger } from "../logger/logger";
+import { AppError } from "../errors/AppError";
 
 export async function createProducer(clientId: string): Promise<Producer> {
   const kafka = createKafkaClient(clientId);
@@ -8,7 +9,15 @@ export async function createProducer(clientId: string): Promise<Producer> {
   // responsible for sending records/data to the kafka topics
   const producer = kafka.producer();
 
-  await producer.connect();
+  try {
+    await producer.connect();
+  } catch (cause) {
+    throw new AppError(503, "Kafka producer connection failed", true, {
+      code: "KAFKA_UNAVAILABLE",
+      cause,
+      details: { clientId, operation: "connect_producer" },
+    });
+  }
 
   logger.info({ clientId }, "kafka producer connected");
 
@@ -21,35 +30,48 @@ export async function publishJson(
   payload: Record<string, unknown>,
   key?: string,
 ): Promise<RecordMetadata[]> {
-  const result = await producer.send({
-    topic,
-    messages: [
-      {
-        key: key ?? null,
-        value: JSON.stringify(payload),
-      },
-    ],
-  });
+  let value: string;
 
-  logger.info({ topic, payload }, "Kafka event publised");
-
-  return result;
-}
-
-export async function publishJsonSafe(
-  producer: Producer | null,
-  topic: string,
-  payload: Record<string, unknown>,
-  key?: string,
-): Promise<void> {
-  if (!producer) {
-    logger.warn({ topic }, "kafka producer is not ready");
-    return;
+  try {
+    value = JSON.stringify(payload);
+    if (typeof value !== "string") {
+      throw new TypeError("Kafka event must serialize to a JSON string");
+    }
+  } catch (cause) {
+    throw new AppError(500, "Kafka event serialization failed", false, {
+      code: "KAFKA_SERIALIZATION_FAILED",
+      cause,
+      details: { topic, operation: "serialize_event" },
+    });
   }
 
   try {
-    await publishJson(producer, topic, payload, key);
-  } catch (err) {
-    logger.error({ err, topic }, "kafka publish failed");
+    const result = await producer.send({
+      topic,
+      messages: [
+        {
+          key: key ?? null,
+          value,
+        },
+      ],
+    });
+
+    logger.info(
+      {
+        topic,
+        eventType:
+          typeof payload.eventType === "string" ? payload.eventType : "unknown",
+        requestId:
+          typeof payload.requestId === "string" ? payload.requestId : undefined,
+      },
+      "Kafka event published",
+    );
+    return result;
+  } catch (cause) {
+    throw new AppError(503, "Kafka event publishing failed", true, {
+      code: "KAFKA_PUBLISH_FAILED",
+      cause,
+      details: { topic, operation: "publish_event" },
+    });
   }
 }

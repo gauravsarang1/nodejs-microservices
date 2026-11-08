@@ -1,6 +1,7 @@
 import type { Consumer, EachMessagePayload } from "kafkajs";
 import { createKafkaClient } from "./client";
 import { logger } from "../logger/logger";
+import { AppError } from "../errors/AppError";
 
 export async function createConsumer(
   clientId: string,
@@ -10,7 +11,15 @@ export async function createConsumer(
 
   const consumer = kafka.consumer({ groupId });
 
-  await consumer.connect();
+  try {
+    await consumer.connect();
+  } catch (cause) {
+    throw new AppError(503, "Kafka consumer connection failed", true, {
+      code: "KAFKA_UNAVAILABLE",
+      cause,
+      details: { clientId, groupId, operation: "connect_consumer" },
+    });
+  }
 
   logger.info({ clientId, groupId }, "kafka consumer connected");
 
@@ -29,26 +38,71 @@ export async function runConsumer(
   handler: (payload: EachMessagePayload) => Promise<void>,
   options?: { fromBeginning?: boolean },
 ): Promise<void> {
-  await consumer.subscribe({
-    topics,
-    fromBeginning: options?.fromBeginning ?? false,
-  });
+  try {
+    await consumer.subscribe({
+      topics,
+      fromBeginning: options?.fromBeginning ?? false,
+    });
 
-  await consumer.run({
-    eachMessage: async (payload) => {
-      const { topic, partition, message } = payload;
+    await consumer.run({
+      eachMessage: async (payload) => {
+        const { topic, partition, message } = payload;
+        const eventType = getEventType(message.value?.toString());
 
-      logger.info(
-        {
-          topic,
-          partition,
-          offset: message.offset,
-          key: message?.key?.toString(),
-        },
-        "Kafka messages received",
-      );
+        logger.info(
+          {
+            topic,
+            partition,
+            offset: message.offset,
+            eventType,
+          },
+          "Kafka message received",
+        );
 
-      await handler(payload);
-    },
-  });
+        try {
+          await handler(payload);
+        } catch (cause) {
+          logger.error(
+            {
+              err: cause,
+              topic,
+              partition,
+              offset: message.offset,
+              eventType,
+            },
+            "Kafka message processing failed",
+          );
+          throw cause;
+        }
+      },
+    });
+  } catch (cause) {
+    throw new AppError(503, "Kafka consumer startup failed", true, {
+      code: "KAFKA_CONSUMER_START_FAILED",
+      cause,
+      details: { topics, operation: "subscribe_and_run" },
+    });
+  }
+}
+
+function getEventType(value: string | undefined): string {
+  if (!value) {
+    return "empty";
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "eventType" in parsed &&
+      typeof parsed.eventType === "string"
+    ) {
+      return parsed.eventType;
+    }
+  } catch {
+    return "invalid_json";
+  }
+
+  return "unknown";
 }

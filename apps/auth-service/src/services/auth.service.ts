@@ -8,7 +8,10 @@ export async function register(input: RegisterInput) {
   const existing = await findByEmail(input.email);
 
   if (existing) {
-    throw new AppError(409, "Email already registered");
+    throw new AppError(409, "Email already registered", true, {
+      code: "EMAIL_ALREADY_REGISTERED",
+      details: { resource: "user" },
+    });
   }
 
   const passwordHash = await bcrypt.hash(input.password, 10);
@@ -26,13 +29,17 @@ export async function login(input: LoginInput) {
   const user = await findByEmail(input.email);
 
   if (!user) {
-    throw new AppError(401, "Invalid email or password");
+    throw new AppError(401, "Invalid email or password", true, {
+      code: "INVALID_CREDENTIALS",
+    });
   }
 
   const valid = await bcrypt.compare(input.password, user.password_hash);
 
   if (!valid) {
-    throw new AppError(401, "Invalid email or password");
+    throw new AppError(401, "Invalid email or password", true, {
+      code: "INVALID_CREDENTIALS",
+    });
   }
 
   const token = signToken({ userId: user.id, role: user.role });
@@ -47,7 +54,10 @@ export async function getMe(userId: string) {
   const user = await findById(userId);
 
   if (!user) {
-    throw new AppError(404, "User not found");
+    throw new AppError(404, "User not found", true, {
+      code: "USER_NOT_FOUND",
+      details: { userId },
+    });
   }
 
   return convertToPublicUser(user);

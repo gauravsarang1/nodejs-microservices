@@ -2,7 +2,9 @@ import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import * as attachmentController from "../controllers/media.controllers";
 import { uploadImage } from "../middleware/upload.middleware";
-import { AppError, createRateLimiter } from "shared";
+import { AppError, createRateLimiter, validateParams } from "shared";
+import { MulterError } from "multer";
+import { attachmentParamsSchema } from "../schemas/media.schemas";
 
 //rate limiter middleware to limit the number of requests per IP address
 const attachmentRateLimiter = createRateLimiter({
@@ -24,16 +26,24 @@ function handleUpload(req: Request, res: Response, next: NextFunction) {
       return next(err);
     }
 
-    if (
-      typeof err === "object" &&
-      err !== null &&
-      "code" in err &&
-      err.code === "LIMIT_FILE_SIZE"
-    ) {
-      return next(new AppError(400, "Image must be 10mb or smaller"));
+    if (err instanceof MulterError) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return next(
+          new AppError(413, "Uploaded image must be 10 MB or smaller", true, {
+            code: "UPLOAD_TOO_LARGE",
+          }),
+        );
+      }
+
+      return next(
+        new AppError(400, "Invalid image upload", true, {
+          code: "INVALID_IMAGE_UPLOAD",
+          details: { uploadError: err.code },
+        }),
+      );
     }
 
-    return next(new AppError(400, "Invalid image upload"));
+    return next(err);
   });
 }
 
@@ -42,10 +52,15 @@ function handleUpload(req: Request, res: Response, next: NextFunction) {
 router.post(
   "/:taskId/attachments",
   attachmentRateLimiter,
+  validateParams(attachmentParamsSchema),
   handleUpload,
   attachmentController.uploadAttachment,
 );
 
-router.get("/:taskId/attachments", attachmentController.listAttachments);
+router.get(
+  "/:taskId/attachments",
+  validateParams(attachmentParamsSchema),
+  attachmentController.listAttachments,
+);
 
 export default router;

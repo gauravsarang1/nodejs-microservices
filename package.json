@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "db:migrate": "tsx scripts/db-migrate.ts",
+    "test:shared": "tsx --test packages/shared/src/db/databaseError.test.ts packages/shared/src/logger/httpLogger.test.ts packages/shared/src/errors/errorHandler.test.ts",
     "dev:gateway": "npm run dev --workspace api-gateway",
     "dev:auth": "npm run dev --workspace auth-service",
     "dev:task": "npm run dev --workspace task-service",

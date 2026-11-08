@@ -85,7 +85,7 @@ spec:
     spec:
       containers:
         - name: auth-service
-          image: gauravsarang/nodejs-microservices:v3
+          image: gauravsarang/nodejs-microservices:v4
           imagePullPolicy: IfNotPresent
           command: ["npm", "run", "dev:auth"]
           ports:
@@ -130,7 +130,7 @@ spec:
     spec:
       containers:
         - name: task-service
-          image: gauravsarang/nodejs-microservices:v3
+          image: gauravsarang/nodejs-microservices:v4
           imagePullPolicy: IfNotPresent
           command: ["npm", "run", "dev:task"]
           ports:
@@ -175,7 +175,7 @@ spec:
     spec:
       containers:
         - name: media-service
-          image: gauravsarang/nodejs-microservices:v3
+          image: gauravsarang/nodejs-microservices:v4
           imagePullPolicy: IfNotPresent
           command: ["npm", "run", "dev:media"]
           ports:
@@ -220,7 +220,7 @@ spec:
     spec:
       containers:
         - name: workflow-service
-          image: gauravsarang/nodejs-microservices:v3
+          image: gauravsarang/nodejs-microservices:v4
           imagePullPolicy: IfNotPresent
           command: ["npm", "run", "dev:workflow"]
           ports:
@@ -265,7 +265,7 @@ spec:
     spec:
       containers:
         - name: api-gateway
-          image: gauravsarang/nodejs-microservices:v3
+          image: gauravsarang/nodejs-microservices:v4
           imagePullPolicy: IfNotPresent
           command: ["npm", "run", "dev:gateway"]
           ports:

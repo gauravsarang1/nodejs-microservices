@@ -3,11 +3,13 @@ import express from "express";
 import { resolve } from "node:path";
 import {
   AppError,
+  configureServiceLogging,
   errorHandler,
-  httpLogger,
   logger,
   requireGatewaySecret,
   successResponse,
+  validateRequiredEnvironment,
+  verifyDatabaseConnection,
 } from "shared";
 import { initKafka } from "./kafka";
 import taskRoutes from "./routes/task.routes";
@@ -15,6 +17,7 @@ import taskRoutes from "./routes/task.routes";
 config({ path: resolve(process.cwd(), ".env") });
 config({ path: resolve(process.cwd(), "../../.env") });
 
+const httpLogger = configureServiceLogging("task-service");
 const PORT = process.env.TASK_SERVICE_PORT || 3002;
 
 const app = express();
@@ -36,16 +39,31 @@ app.use((_req, _res, next) => {
 
 app.use(errorHandler);
 
-initKafka()
-  .then(() => {
-    logger.info("Kafka initialized successfully");
-    app.listen(PORT, () => {
-      logger.info(`Task service is running on port ${PORT}`);
-    });
-  })
-  .catch((err) => {
-    logger.error("Failed to initialize Kafka", err);
-    process.exit(1);
+async function startTaskService() {
+  validateRequiredEnvironment([
+    "DATABASE_URL",
+    "GATEWAY_SECRET",
+    "KAFKA_BROKERS",
+  ]);
+  await verifyDatabaseConnection();
+  await initKafka();
+  logger.info({ dependency: "kafka" }, "Dependency initialized");
+
+  app.listen(PORT, () => {
+    logger.info({ port: PORT }, "Task service started");
   });
+}
 
-
+startTaskService().catch((err: unknown) => {
+  logger.fatal(
+    {
+      err,
+      operation: "service_startup",
+      ...(err instanceof AppError
+        ? { errorCode: err.code, ...err.details }
+        : {}),
+    },
+    "Task service failed to start",
+  );
+  process.exit(1);
+});
